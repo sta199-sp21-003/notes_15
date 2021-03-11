@@ -1,0 +1,296 @@
+---
+title: "Simulation-based inference - hypothesis testing"
+author: ""
+date: ""
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      comment = "#>", highlight = TRUE,
+                      fig.align = "center")
+```
+
+## Main ideas
+
+- Understand the hypothesis testing framework
+
+- Understand the statistical conclusions that can and cannot be made from a
+  hypothesis test
+  
+- Use functions from `infer` to carry-out a simulation-based hypothesis test
+  for the population mean and population proportion
+  
+# Packages
+
+```{r packages}
+library(tidyverse)
+library(infer)
+```
+
+# Data
+
+We'll continue to work with the sample of Zoom screen-time data we obtained.
+To make things easier with the `infer` functions, we'll create a tibble with
+`time` as a single variable.
+
+```{r zoom_data}
+zoom <- tibble(
+  time = c(299, 192, 196, 218, 194, 250, 183, 218, 207, 
+           209, 191, 189, 244, 233, 208, 216, 178, 209, 
+           201, 173, 186, 209, 188, 231, 195, 200, 190, 
+           199, 226, 238)
+)
+```
+
+```{r preview_zoom}
+zoom
+```
+
+# Set seed
+
+To obtain reproducible results, set the seed for the random number generation.
+
+```{r set_seed}
+set.seed(1421)
+```
+
+# Notes
+
+Recall our hypothesis testing framework:
+
+1. Start with two hypotheses about the population: the null hypothesis and the 
+   alternative hypothesis.
+
+2. Choose a (representative) sample, collect data, and analyze the data.
+
+3. Figure out how likely it is to see data like what we observed, **IF** the 
+   null hypothesis were in fact true.
+
+4. If our data would have been extremely unlikely if the null claim were true, 
+   then we reject it and deem the alternative claim worthy of further study. 
+   Otherwise, we cannot reject the null claim.
+   
+## Example: testing population mean - $\mu$
+   
+We've already done items 1 and 2, where
+
+$$H_0: \mu = 200$$
+$$H_1: \mu \neq 200$$
+
+For this study, let $\alpha = 0.05$. 
+
+To tackle items 3 and 4, we'll use a simulation-based approach with functions
+from `infer`.
+
+### Simulate the null distribution
+
+Recall that there is variability in the sampling distribution of the sample
+mean. We need to account for this in our statistical study. Just as we did
+for confidence intervals, we'll use a bootstrap procedure here.
+
+1. `specify()` the variable of interest
+
+2. set the null hypothesis with `hypothesize()`
+
+3. `generate()` the bootstrap samples
+
+4. `calculate()` the statistic of interest
+
+```{r zoom_null}
+null_dist <- zoom %>% 
+  specify(response = time) %>% 
+  hypothesize(null = "point", mu = 200) %>% 
+  generate(reps = 10000, type = "bootstrap") %>% 
+  calculate(stat = "mean")
+```
+
+### Visualize the null distribution
+
+```{r zoom_null_viz}
+visualise(null_dist) +
+  labs(x = "Sample means", y = "Count", title = "Simulated null distribution")
+```
+
+**What do you notice?**
+
+### Compute p-value
+
+Next, we calculate the probability of getting data like ours, *or more extreme*,
+if $H_0$ were in fact actually true.
+
+Our observed sample mean is 209 minutes.
+
+```{r zoom_xbar}
+x_bar <- zoom %>% 
+  summarise(mean_time = mean(time))
+
+x_bar
+```
+
+```{r zoom_null_viz_pvalue}
+visualise(null_dist) +
+  shade_p_value(obs_stat = x_bar, direction = "two-sided") +
+  labs(x = "Sample mean", y = "Count")
+```
+
+In the context of this simulation-based approach, the p-value is the proportion
+of observations shaded light-red. To compute this, `infer` provides a 
+convenient function -- `get_p_value()`.
+
+```{r zoom_pvalue}
+null_dist %>% 
+  get_p_value(obs_stat = x_bar, direction = "two-sided")
+```
+
+### Conclusion
+
+Given the calculated p-value and the specified $\alpha$, what conclusion do 
+you make?
+
+## Practice 1
+
+Recall our original example: The state of North Carolina claims that students in
+8th grade are spending, on average, 200 minutes on Zoom each day. Suppose in
+reporting this the incorrect metric was specified, it should have been the
+median time. Use your sample data to investigate if the median Zoom screen-time
+is more than 200 minutes.
+
+(1) Write out the hypotheses for this statistical test. Let $M$ represent the
+    population median. Let $\alpha = 0.05$.
+    
+(2) Generate the null distribution.
+
+```{r practice_1_2}
+
+```
+
+(3) Visualize the null distribution, observed statistic, and shaded region
+    corresponding to the p-value.
+    
+```{r practice_1_3}
+
+```
+
+(4) Interpret the results of your test in the context of the data.
+
+```{r practice_1_4}
+
+```
+
+## Example: testing population proportion - $p$
+
+People providing an organ for donation sometimes seek the help of a special 
+medical consultant. These consultants assist the patient in all aspects of the
+surgery, with the goal of reducing the possibility of complications during the 
+medical procedure and recovery. Patients might choose a consultant based in 
+part on the historical complication rate of the consultant's clients.
+
+One consultant tried to attract patients by noting that the average complication 
+rate for liver donor surgeries in the US is about 10%, but her clients have 
+only had 3 complications in the 62 liver donor surgeries she has facilitated. 
+She claims this is strong evidence that her work meaningfully contributes to 
+reducing complications (and therefore she should be hired!).
+
+(1) Write out the hypotheses for this statistical test. Let $p$ represent the
+    population proportion of complications from liver donor surgeries. State
+    your significance level.
+    
+    $$H_0: p = 0.10$$
+    $$H_A: p < 0.10$$
+    
+    Let $\alpha = 0.01$.
+    
+(2) Generate the null distribution.
+
+```{r liver_data}
+liver <- tibble(
+  surgery_result = rep(c("complication", "no complication"), times = c(3, 59))
+)
+
+liver
+```
+
+```{r liver_null}
+null_dist_phat <- liver %>% 
+  specify(response = surgery_result, success = "complication") %>% 
+  hypothesise(null = "point", p = 0.10) %>% 
+  generate(reps = 1000) %>% 
+  calculate(stat = "prop")
+```
+
+(3) Visualize the null distribution, observed statistic, and shaded region
+    corresponding to the p-value.
+    
+```{r liver_null_viz}
+p_hat <- liver %>% 
+  count(surgery_result) %>% 
+  mutate(prop = n / sum(n)) %>% 
+  filter(surgery_result == "complication") %>% 
+  select(prop)
+
+visualise(null_dist_phat) +
+  shade_p_value(obs_stat = p_hat, direction = "less") +
+  labs(x = "Sample proportion", y = "Count")
+```
+
+(4) Interpret the results of your test in the context of the data.
+
+```{r liver_pvalue}
+null_dist_phat %>% 
+  get_p_value(obs_stat = p_hat, direction = "less")
+```
+
+## Practice 2
+
+Consider the mice data from the previous notes.
+
+```{r data_mice}
+mice <- read_table("http://users.stat.ufl.edu/~winner/data/micerad.dat",
+                   col_names = FALSE) %>% 
+  rename(dose = X1, treat = X2, died = X3)
+```
+
+Previous studies have shown that 50% of mice die when subject to radiation
+despite being on a treatment. Does the Streptomycin Therapy 
+(treatment in this study) produce a survival rate better than 50%? Perform
+a statistical hypothesis test to investigate. State the hypotheses,
+significance level, p-value, and conclusion. What is a hidden variable we
+are not considering when conducting this test?
+
+$$H_0: p = 0.50$$
+$$H_A: p < 0.50$$
+
+Let $\alpha = 0.01$.
+
+First, we'll compute the observed sample proportion of mice that died while
+on the treatment.
+
+```{r mice_p_hat}
+
+```
+
+```{r mice_test}
+
+```
+
+Given that the p-value is less than $\alpha$ we reject the null hypothesis.
+That is, we reject the claim that the survival rate of mice exposed to radiation
+while on the Streptomycin Therapy is 50%.
+
+A hidden variable we haven't accounted for and assumed to be constant was the
+radiation `dose`. In our example, this is okay because our main focus is 
+understanding the testing framework. However, in practice, it would be bad
+to not consider this in an analysis.
+
+## References
+
+1. C.W. Hammond, et al. (1955). "The Effect of Streptomycin Therapy
+   on Mice Irradiated with Fast Neutrons", Radiation Research, Vol2,#4,
+   pp.354-360
+
+2. "Infer - Tidy Statistical Inference". Infer.Netlify.App, 2021, 
+   https://infer.netlify.app/index.html.
+   
